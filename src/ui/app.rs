@@ -1,149 +1,113 @@
 use crate::data::models::ListingData;
 use crate::error::AppError;
-use crate::scraper::olx;
-use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
+use crate::scraper::olx::fetch_and_parse_listings;
+use crossterm::event::{self, Event, KeyCode};
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use std::io;
-use tui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
 
-
-#[derive(PartialEq)]
-pub enum InputMode {
-    Normal,
-    Editing,
-}
 
 pub struct App {
     pub listings: Vec<ListingData>,
-    pub selected_listing: usize,
-    pub error: Option<String>,
+    pub selected_index: usize,
+    pub show_dialog: bool,
     pub query: String,
-    pub input: String,
-    pub input_mode: InputMode,
 }
-
 
 impl App {
     pub fn new() -> Self {
         Self {
             listings: Vec::new(),
-            selected_listing: 0,
-            error: None,
+            selected_index: 0,
+            show_dialog: true,
             query: String::from("karta graficzna"),
-            input: String::new(),
-            input_mode: InputMode::Normal,
         }
     }
 
-
-
-    pub fn next_listing(&mut self) {
-        if !self.listings.is_empty() {
-            self.selected_listing = (self.selected_listing + 1) % self.listings.len();
-        }
+    pub fn toggle_dialog(&mut self) {
+        self.show_dialog = !self.show_dialog;
     }
 
-    pub fn previous_listing(&mut self) {
-        if !self.listings.is_empty() {
-            self.selected_listing = if self.selected_listing > 0 {
-                self.selected_listing - 1
-            } else {
-                self.listings.len() - 1
-            };
-        }
+    pub fn input_char(&mut self, c: char) {
+        self.query.push(c);
     }
 
-    pub fn add_char_to_input(&mut self, c: char) {
-        self.input.push(c);
+    pub fn backspace(&mut self) {
+        self.query.pop();
     }
 
-    pub fn pop_char_from_input(&mut self) {
-        self.input.pop();
+
+    pub async fn perform_search(&mut self) -> Result<(), AppError> {
+        self.listings = fetch_and_parse_listings(&self.query).await?;
+        self.selected_index = 0;
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<(), AppError> {
-        enable_raw_mode()?;
+        // Setup terminal
+        crossterm::terminal::enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        self.fetch_listings().await?;
+        // Fetch initial listings
+        self.listings = fetch_and_parse_listings("https://www.olx.pl/elektronika/komputery/").await?;
 
+        // Main event loop
         loop {
-            terminal.draw(|f| crate::ui::widgets::ui(f, self))?;
-
+            terminal.draw(|f| crate::ui::ui::draw(f, self))?;
+    
             if let Event::Key(key) = event::read()? {
-                match self.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Char('q') => break,
-                        KeyCode::Char('e') => {
-                            self.input_mode = InputMode::Editing;
-                            self.input = self.query.clone();
+                match key.code {
+                    KeyCode::Char('q') if !self.show_dialog => break,
+                    KeyCode::Char('d') if !self.show_dialog => self.toggle_dialog(),
+                    KeyCode::Down => {
+                        if !self.show_dialog && self.selected_index < self.listings.len().saturating_sub(1) {
+                            self.selected_index += 1;
                         }
-                        KeyCode::Down => {
-                            if !self.listings.is_empty() {
-                                self.selected_listing = (self.selected_listing + 1) % self.listings.len();
-                            }
-                        },
-                        KeyCode::Up => {
-                            if !self.listings.is_empty() {
-                                self.selected_listing = if self.selected_listing > 0 {
-                                    self.selected_listing - 1
-                                } else {
-                                    self.listings.len() - 1
-                                };
-                            }
-                        },
-                        _ => {}
-                    },
-                    InputMode::Editing => match key.code {
-                        KeyCode::Enter => {
-                            self.query = self.input.clone();
-                            self.input_mode = InputMode::Normal;
-                            self.fetch_listings().await?;
+                    }
+                    KeyCode::Up => {
+                        if !self.show_dialog && self.selected_index > 0 {
+                            self.selected_index -= 1;
                         }
-                        KeyCode::Char(c) => {
-                            self.input.push(c);
+                    }
+                    KeyCode::Char(c) => {
+                        if self.show_dialog {
+                            self.input_char(c);
                         }
-                        KeyCode::Backspace => {
-                            self.input.pop();
+                    }
+                    KeyCode::Backspace => {
+                        if self.show_dialog {
+                            self.backspace();
                         }
-                        KeyCode::Esc => {
-                            self.input_mode = InputMode::Normal;
+                    }
+                    KeyCode::Enter => {
+                        if self.show_dialog {
+                            self.toggle_dialog();
+                            self.perform_search().await?;
                         }
-                        _ => {}
-                    },
+                    }
+                    KeyCode::Esc => {
+                        if self.show_dialog {
+                            self.toggle_dialog();
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
 
-        disable_raw_mode()?;
-        execute!(
+        // Restore terminal
+        crossterm::terminal::disable_raw_mode()?;
+        crossterm::execute!(
             terminal.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
+            crossterm::terminal::LeaveAlternateScreen
         )?;
-        terminal.show_cursor()?;
 
-        Ok(())
-    }
-
-    async fn fetch_listings(&mut self) -> Result<(), AppError> {
-        let url = format!("https://www.olx.pl/oferty/q-{}/", self.query.replace(" ", "-"));
-        match olx::fetch_and_parse_listings(&url).await {
-            Ok(listings) => {
-                self.listings = listings;
-                self.error = None;
-            }
-            Err(e) => self.error = Some(format!("Error fetching listings: {}", e)),
-        }
         Ok(())
     }
 }
+
+
+
