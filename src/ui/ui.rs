@@ -1,8 +1,8 @@
 use crate::ui::app::App;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Row, Table, Cell, TableState, Paragraph, Clear},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState},
     Frame,
 };
 
@@ -80,7 +80,24 @@ fn draw_listings(f: &mut Frame, app: &App) {
     let mut state = TableState::default();
     state.select(Some(app.selected_index));
 
+
+
+        
+    f.render_stateful_widget(&      t, chunks[0], &mut state);
+
+    let page_info = Paragraph::new(format!("Page {} of {}", app.current_page, app.total_pages))
+    .style(Style::default().fg(Color::Yellow))
+    .alignment(Alignment::Center);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(chunks[0]);
+
     f.render_stateful_widget(t, chunks[0], &mut state);
+    f.render_widget(page_info, chunks[1]);
+
+    
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

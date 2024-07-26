@@ -12,6 +12,8 @@ pub struct App {
     pub selected_index: usize,
     pub show_dialog: bool,
     pub query: String,
+    pub current_page: u32,
+    pub total_pages: u32,
 }
 
 impl App {
@@ -20,7 +22,9 @@ impl App {
             listings: Vec::new(),
             selected_index: 0,
             show_dialog: true,
-            query: String::from("karta graficzna"),
+            query: String::from(" "),
+            current_page: 1,
+            total_pages: 1,
         }
     }
 
@@ -37,8 +41,37 @@ impl App {
     }
 
 
+
+
+    pub async fn next_page(&mut self) -> Result<(), AppError> {
+        if self.current_page < self.total_pages {
+            self.current_page += 1;
+            self.fetch_current_page().await?;
+        }
+        Ok(())
+    }
+
+    pub async fn prev_page(&mut self) -> Result<(), AppError> {
+        if self.current_page > 1 {
+            self.current_page -= 1;
+            self.fetch_current_page().await?;
+        }
+        Ok(())
+    }
+
+    async fn fetch_current_page(&mut self) -> Result<(), AppError> {
+        let (listings, total_pages) = fetch_and_parse_listings(&self.query, self.current_page).await?;
+        self.listings = listings;
+        self.total_pages = total_pages;
+        self.selected_index = 0;
+        Ok(())
+    }
+
     pub async fn perform_search(&mut self) -> Result<(), AppError> {
-        self.listings = fetch_and_parse_listings(&self.query).await?;
+        self.current_page = 1;
+        let (listings, total_pages) = fetch_and_parse_listings(&self.query, self.current_page).await?;
+        self.listings = listings;
+        self.total_pages = total_pages;
         self.selected_index = 0;
         Ok(())
     }
@@ -52,12 +85,12 @@ impl App {
         let mut terminal = Terminal::new(backend)?;
 
         // Fetch initial listings
-        self.listings = fetch_and_parse_listings("https://www.olx.pl/elektronika/komputery/").await?;
-
+        let (listings, total_pages) = fetch_and_parse_listings("https://www.olx.pl/elektronika/komputery/", 1).await?;
+        self.listings = listings;
+        self.total_pages = total_pages;
         // Main event loop
         loop {
             terminal.draw(|f| crate::ui::ui::draw(f, self))?;
-    
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') if !self.show_dialog => break,
@@ -70,6 +103,16 @@ impl App {
                     KeyCode::Up => {
                         if !self.show_dialog && self.selected_index > 0 {
                             self.selected_index -= 1;
+                        }
+                    }
+                    KeyCode::Right => {
+                        if !self.show_dialog {
+                            self.next_page().await?;
+                        }
+                    }
+                    KeyCode::Left => {
+                        if !self.show_dialog {
+                            self.prev_page().await?;
                         }
                     }
                     KeyCode::Char(c) => {
