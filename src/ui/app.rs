@@ -5,7 +5,8 @@ use crossterm::event::{self, Event, KeyCode};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
-
+use tokio::fs::File as AsyncFile;
+use tokio::io::AsyncWriteExt;           
 
 pub struct App {
     pub listings: Vec<ListingData>,
@@ -41,8 +42,6 @@ impl App {
     }
 
 
-
-
     pub async fn next_page(&mut self) -> Result<(), AppError> {
         if self.current_page < self.total_pages {
             self.current_page += 1;
@@ -64,6 +63,58 @@ impl App {
         self.listings = listings;
         self.total_pages = total_pages;
         self.selected_index = 0;
+        Ok(())
+    }
+
+
+    async fn dump_all_pages_csv(&self) -> Result<(), AppError> {
+        let filename = "listings.csv";
+        let mut file = AsyncFile::create(filename).await?;
+    
+        let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
+    
+        // Write header
+        wtr.write_record(&[
+            "ID", "URL", "Title", "Price", "Image URL", "Location/Date", 
+            "Condition", "Is Featured", "Has Delivery", "Has Safety Badge"
+        ])?;
+    
+        // Write data
+        for listing in &self.listings {
+            wtr.write_record(&[
+                &listing.id,
+                &listing.url,
+                &listing.title,
+                &listing.price,
+                &listing.image_url,
+                &listing.location_date,
+                &listing.condition,
+                &listing.is_featured.to_string(),
+                &listing.has_delivery.to_string(),
+                &listing.has_safety_badge.to_string(),
+            ])?;
+        }
+    
+        let csv_content = String::from_utf8(wtr.into_inner()?)?;
+        file.write_all(csv_content.as_bytes()).await?;
+    
+        println!("CSV file written successfully");
+        Ok(())
+    }
+
+    pub async fn dump_all_pages_json(&self) -> Result<(), AppError> {
+        let mut all_listings = Vec::new();
+        for page in 1..=self.total_pages {
+            let (listings, _) = fetch_and_parse_listings(&self.query, page).await?;
+            all_listings.extend(listings);
+        }
+        
+        // Write all_listings to a file
+        // You can use serde to serialize the data to JSON or CSV
+        // For example, using serde_json:
+        let json = serde_json::to_string(&all_listings)?;
+        std::fs::write("all_listings.json", json)?;
+        
         Ok(())
     }
 
@@ -100,6 +151,22 @@ impl App {
                             self.selected_index += 1;
                         }
                     }
+                    
+                    KeyCode::Char('s') => {
+                        if !self.show_dialog {
+                            self.dump_all_pages_csv().await ?;
+                        }
+                    }
+
+
+                    KeyCode::Char('x') => {
+                        if !self.show_dialog {
+                            self.dump_all_pages_json().await?;
+                        }
+                    }
+
+
+
                     KeyCode::Up => {
                         if !self.show_dialog && self.selected_index > 0 {
                             self.selected_index -= 1;
@@ -131,6 +198,7 @@ impl App {
                             self.perform_search().await?;
                         }
                     }
+
                     KeyCode::Esc => {
                         if self.show_dialog {
                             self.toggle_dialog();

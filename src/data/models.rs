@@ -1,4 +1,7 @@
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]                               
 pub struct ListingData {
     pub id: String,
     pub url: String,
