@@ -7,7 +7,7 @@ use reqwest;
 //TODO move these selectors to a better place (assigned constants?) or store them in a struct idk
 const CARD_DIV: &str = "div[data-cy='l-card']";
 const TITLE: &str = "h6.css-1wxaaza";
-    const PRICE: &str = "p.css-13afqrm";
+const PRICE: &str = "p.css-13afqrm";
 const LOCATION_DATE: &str = "p.css-1mwdrlh";
 const CONDITION: &str = "span.css-3lkihg";
 const FEATURED: &str = "div[data-testid='adCard-featured']";

@@ -70,53 +70,54 @@ impl App {
     async fn dump_all_pages_csv(&self) -> Result<(), AppError> {
         let filename = "listings.csv";
         let mut file = AsyncFile::create(filename).await?;
-    
         let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
     
         // Write header
         wtr.write_record(&[
-            "ID", "URL", "Title", "Price", "Image URL", "Location/Date", 
+            "ID", "URL", "Title", "Price", "Image URL", "Location/Date",
             "Condition", "Is Featured", "Has Delivery", "Has Safety Badge"
         ])?;
     
-        // Write data
-        for listing in &self.listings {
-            wtr.write_record(&[
-                &listing.id,
-                &listing.url,
-                &listing.title,
-                &listing.price,
-                &listing.image_url,
-                &listing.location_date,
-                &listing.condition,
-                &listing.is_featured.to_string(),
-                &listing.has_delivery.to_string(),
-                &listing.has_safety_badge.to_string(),
-            ])?;
+        // Fetch and write data for all pages
+        for page in 1..=self.total_pages {
+            let (listings, _) = fetch_and_parse_listings(&self.query, page).await?;
+            for listing in listings {
+                wtr.write_record(&[
+                    &listing.id,
+                    &listing.url,
+                    &listing.title,
+                    &listing.price,
+                    &listing.image_url,
+                    &listing.location_date,
+                    &listing.condition,
+                    &listing.is_featured.to_string(),
+                    &listing.has_delivery.to_string(),
+                    &listing.has_safety_badge.to_string(),
+                ])?;
+            }
         }
     
         let csv_content = String::from_utf8(wtr.into_inner()?)?;
         file.write_all(csv_content.as_bytes()).await?;
-    
         println!("CSV file written successfully");
         Ok(())
     }
 
-    pub async fn dump_all_pages_json(&self) -> Result<(), AppError> {
-        let mut all_listings = Vec::new();
-        for page in 1..=self.total_pages {
-            let (listings, _) = fetch_and_parse_listings(&self.query, page).await?;
-            all_listings.extend(listings);
+        pub async fn dump_all_pages_json(&self) -> Result<(), AppError> {
+            let mut all_listings = Vec::new();
+            for page in 1..=self.total_pages {
+                let (listings, _) = fetch_and_parse_listings(&self.query, page).await?;
+                all_listings.extend(listings);
+            }
+            
+            // Write all_listings to a file
+            // You can use serde to serialize the data to JSON or CSV
+            // For example, using serde_json:
+            let json = serde_json::to_string(&all_listings)?;
+            std::fs::write("all_listings.json", json)?;
+            
+            Ok(())
         }
-        
-        // Write all_listings to a file
-        // You can use serde to serialize the data to JSON or CSV
-        // For example, using serde_json:
-        let json = serde_json::to_string(&all_listings)?;
-        std::fs::write("all_listings.json", json)?;
-        
-        Ok(())
-    }
 
     pub async fn perform_search(&mut self) -> Result<(), AppError> {
         self.current_page = 1;
