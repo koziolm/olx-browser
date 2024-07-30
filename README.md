@@ -22,17 +22,17 @@ OLX Browser is a personal project designed to streamline the process of browsing
 To get started with OLX Browser, follow these simple steps:
 
 1. Clone the GitHub repository:
-   ```bash
-   git clone https://github.com/yourusername/olx-browser.git
-   ```
+```bash
+git clone https://github.com/koziolm/olx-browser.git
+```
 2. Navigate to the project directory:
-    ```bash
-    cd olx-browser
-    ```
+```bash
+cd olx-browser
+```
 3. Run the application using Cargo:
-    ```bash
-    cargo run
-    ```
+```bash
+cargo run
+```
 
 ## 🛠️ Future Improvements
 
@@ -44,7 +44,7 @@ To get started with OLX Browser, follow these simple steps:
 ## 🤝 Contributing
 Contributions are welcome! Feel free to submit pull requests or open issues to improve OLX Browser.
 ## 📄 License
-choose a license later
+GNU General Public License v3.0
 
 
 
@@ -64,16 +64,3 @@ OLX Browser relies on the following Rust crates:
 - **fuzzy-matcher** (v0.3.7): Fuzzy string matching algorithms
 
 To install these dependencies, ensure they are listed in your `Cargo.toml` file:
-
-```toml
-[dependencies]
-crossterm = "0.27.0"
-scraper = "0.19.1"
-tui = "0.19.0"
-reqwest = { version = "0.11", features = ["json"] }
-tokio = { version = "1", features = ["full"] }
-ratatui = "0.27.0"
-serde_json = "1.0.120"
-serde = { version = "1.0.204", features = ["derive"] }
-csv = "1.3.0"
-fuzzy-matcher = "0.3.7"
